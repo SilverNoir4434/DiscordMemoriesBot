@@ -9,7 +9,7 @@ namespace DiscordMemoriesBot
 
         public async Task ReadJSON()
         {
-            using (StreamReader reader = new StreamReader("../../../config.json"))
+            using (StreamReader reader = new StreamReader("config.json"))
             {
                 string json = await reader.ReadToEndAsync();
                 JSONStructure data = JsonConvert.DeserializeObject<JSONStructure>(json);

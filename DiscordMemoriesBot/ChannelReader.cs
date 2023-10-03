@@ -17,14 +17,14 @@
         {
             // Instantiates the list, and adds all channels in channel.txt to it
             channels = new List<ulong> { };
-            using (var sr = new StreamReader("../../../channels.txt"))
+            using (var sr = new StreamReader("channels.txt"))
             {
                 string currentLine;
                 while ((currentLine = sr.ReadLine()) != null)
                 {
                     channels.Add(ulong.Parse(currentLine));
                 }
-                sr.Close();
+                sr.Dispose();
             }
         }
 

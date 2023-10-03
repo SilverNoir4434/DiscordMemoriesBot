@@ -17,9 +17,9 @@ namespace DiscordMemoriesBot.commands
              * wipe data from all three files and continue the command. If not, exits the command. 
              * Command also exits if the user is inactive for 30 seconds.
              */
-            FileInfo channelFile = new FileInfo("../../../channels.txt");
-            FileInfo pinsFile = new FileInfo("../../../pins.txt");
-            FileInfo roleFile = new("../../../roles.txt");
+            FileInfo channelFile = new FileInfo("channels.txt");
+            FileInfo pinsFile = new FileInfo("pins.txt");
+            FileInfo roleFile = new("roles.txt");
             if (channelFile.Length > 0 || pinsFile.Length > 0 || roleFile.Length > 0)
             {
                 await ctx.RespondAsync("I already have channels and memories logged! Are you sure you want to continue setup? If you " +
@@ -33,9 +33,9 @@ namespace DiscordMemoriesBot.commands
                 if (responseMessage.Result.Content.ToLower() == "yes")
                 {
                     await ctx.RespondAsync("Alright! Continuing with setup...");
-                    File.WriteAllText("../../../pins.txt", "");
-                    File.WriteAllText("../../../channels.txt", "");
-                    File.WriteAllText("../../../roles.txt", "");
+                    File.WriteAllText("pins.txt", "");
+                    File.WriteAllText("channels.txt", "");
+                    File.WriteAllText("roles.txt", "");
                     Console.WriteLine("Files reset!");
                 }
                 else
@@ -99,11 +99,11 @@ namespace DiscordMemoriesBot.commands
                                     
                                     if (roleFile.Length > 0)
                                     {
-                                        File.AppendAllText("../../../roles.txt","\n" + role.Id.ToString() + ", " + ctx.Guild.Id.ToString());
+                                        File.AppendAllText("roles.txt","\n" + role.Id.ToString() + ", " + ctx.Guild.Id.ToString());
                                     }
                                     else
                                     {
-                                        File.WriteAllText("../../../roles.txt", role.Id.ToString() + ", " + ctx.Guild.Id.ToString());
+                                        File.WriteAllText("roles.txt", role.Id.ToString() + ", " + ctx.Guild.Id.ToString());
                                     }
                                     await responseMessage.Result.RespondAsync("Setup complete!");
                                 }
@@ -125,12 +125,12 @@ namespace DiscordMemoriesBot.commands
                     channelFile.Refresh();
                     if (channelFile.Length == 0)
                     {
-                        File.WriteAllText("../../../channels.txt", channelID.ToString());
+                        File.WriteAllText("channels.txt", channelID.ToString());
                         channelFile.Refresh();
                     }
                     else
                     {
-                        File.AppendAllText("../../../channels.txt", "\n" + channelID.ToString());
+                        File.AppendAllText("channels.txt", "\n" + channelID.ToString());
                     }
                     var channel = ctx.Guild.GetChannel(channelID);
                     var channelPins = await channel.GetPinnedMessagesAsync();
@@ -184,17 +184,17 @@ namespace DiscordMemoriesBot.commands
             /* Gets the channels file, then writes the channel into it. If the channels file already has a channel in it, appends
              * the new channel to the file. Also records the pins from the provided channel.
              */
-            FileInfo channelFile = new FileInfo("../../../channels.txt");
+            FileInfo channelFile = new FileInfo("channels.txt");
             if (channelFile.Length == 0) {
-                File.WriteAllText("../../../channels.txt", channelID.ToString());
+                File.WriteAllText("channels.txt", channelID.ToString());
             } 
             else
             {
-                File.AppendAllText("../../../channels.txt", "\n" + channelID.ToString());
+                File.AppendAllText("channels.txt", "\n" + channelID.ToString());
             }
             var channelPins = await channel.GetPinnedMessagesAsync();
             var pinsList = channelPins.ToList();
-            Program.ModifyPinsFile(pinsList, 'w');
+            Program.ModifyPinsFile(pinsList, 'a');
             await ctx.Channel.SendMessageAsync("Pins from this channel written to file!");
         }
 
@@ -209,7 +209,7 @@ namespace DiscordMemoriesBot.commands
         public async Task GetPins(CommandContext ctx)
         {
             Console.WriteLine("Getting pins from logged channels...");
-            File.WriteAllText("../../../pins.txt", "");
+            File.WriteAllText("pins.txt", "");
             ChannelReader cr = new();
             foreach (DiscordGuild guild in Program.Client.Guilds.Values)
             {
@@ -217,9 +217,9 @@ namespace DiscordMemoriesBot.commands
                 {
                     if (guild.Channels.ContainsKey(channel))
                     {
-                        var channelPins = await guild.Channels[channel].GetPinnedMessagesAsync();
+                        var channelPins = await guild.GetChannel(channel).GetPinnedMessagesAsync();
                         var pinsList = channelPins.ToList();
-                        FileInfo pinsFile = new FileInfo("../../../pins.txt");
+                        FileInfo pinsFile = new FileInfo("pins.txt");
                         if (pinsFile.Length == 0)
                         {
                             Program.ModifyPinsFile(pinsList, 'w');
@@ -243,7 +243,7 @@ namespace DiscordMemoriesBot.commands
             }
             else
             {
-                File.WriteAllText("../../../roles.txt", role.Id.ToString() + ", " + ctx.Guild.Id.ToString());
+                File.WriteAllText("roles.txt", role.Id.ToString() + ", " + ctx.Guild.Id.ToString());
                 await ctx.Channel.SendMessageAsync("Role changed!");
             }
         }

@@ -3,6 +3,7 @@ using DSharpPlus;
 using DSharpPlus.CommandsNext;
 using DSharpPlus.Entities;
 using DSharpPlus.EventArgs;
+using DSharpPlus.Exceptions;
 using DSharpPlus.Interactivity;
 using DSharpPlus.Interactivity.Extensions;
 using System.Text;
@@ -22,6 +23,17 @@ namespace DiscordMemoriesBot
 
         static async Task Main(string[] args)
         {
+            if (!File.Exists("pins.txt")) File.Create("pins.txt");
+            if (!File.Exists("channels.txt")) File.Create("channels.txt");
+            if (!File.Exists("roles.txt")) File.Create("roles.txt");
+            if (!File.Exists("config.json"))
+            {
+                File.Create("config.json");
+                Console.WriteLine("Input bot token.");
+                var token = Console.ReadLine();
+                string jsonText = "{\r\n  \"token\": \"" + token + "\",\r\n  \"prefix\": \"!\"\r\n}";
+                File.WriteAllText("config.json", jsonText);
+            }
             // reads bot token and command prefix from config.json
             var jsonReader = new JSONReader();
             await jsonReader.ReadJSON();
@@ -91,7 +103,7 @@ namespace DiscordMemoriesBot
             /* Removes the message from the pins file by rewriting the file with each message
              * except the removed message.
              */
-            using (StreamReader sr = new StreamReader("../../../pins.txt"))
+            using (StreamReader sr = new StreamReader("pins.txt"))
             {
                 string currentLine;
                 bool hasLooped = false;
@@ -110,7 +122,7 @@ namespace DiscordMemoriesBot
                     }
                 }
             }
-            File.WriteAllText("../../../pins.txt", sb.ToString());
+            File.WriteAllText("pins.txt", sb.ToString());
             return Task.CompletedTask;
         }
 
@@ -136,7 +148,7 @@ namespace DiscordMemoriesBot
             sb.Append("\n" + pinnedMessage.Id.ToString() + ", " + 
                 pinnedMessage.Timestamp.ToString() + ", " + pinnedMessage.Author.Id.ToString()
                 + ", " + pinnedMessage.ChannelId.ToString());
-            File.AppendAllText("../../../pins.txt", sb.ToString());
+            File.AppendAllText("pins.txt", sb.ToString());
         }
 
 
@@ -173,7 +185,7 @@ namespace DiscordMemoriesBot
                     }
                 }
                 // Writes contents of the StringBuilder to pins.txt.
-                File.WriteAllText("../../../pins.txt", sb.ToString());
+                File.WriteAllText("pins.txt", sb.ToString());
             }
 
             else if (writeOrAppend == 'a')
@@ -185,7 +197,7 @@ namespace DiscordMemoriesBot
                     sb.Append("\n" + pin.Id.ToString() + ", " + pin.Timestamp.ToString() + ", " + pin.Author.Id.ToString() + ", " + pin.ChannelId.ToString());
                 }
                 // Appends contents of the StringBuilder to pins.txt.
-                File.AppendAllText("../../../pins.txt", sb.ToString());
+                File.AppendAllText("pins.txt", sb.ToString());
             }
 
             else
@@ -202,9 +214,9 @@ namespace DiscordMemoriesBot
         {
             Console.WriteLine("Checking for memory...");
             // Checking to make sure setup command has been run first
-            FileInfo channelFile = new("../../../channels.txt");
-            FileInfo pinsFile = new("../../../pins.txt");
-            FileInfo roleFile = new("../../../roles.txt");
+            FileInfo channelFile = new("channels.txt");
+            FileInfo pinsFile = new("pins.txt");
+            FileInfo roleFile = new("roles.txt");
             if (channelFile.Length == 0 || pinsFile.Length == 0)
             {
                 Console.WriteLine("Setup command must be run before doing that!");
@@ -212,11 +224,13 @@ namespace DiscordMemoriesBot
             }
             var guilds = Client.Guilds;
             bool memoryFound = false;
+            bool authorIsDeletedAccount = false;
+            DiscordMember? author = null;
             foreach (var guild in guilds)
             {
                 // gets the current guild
                 var currentGuild = await Client.GetGuildAsync(guild.Key); 
-                using (StreamReader sr = new StreamReader("../../../pins.txt"))
+                using (StreamReader sr = new StreamReader("pins.txt"))
                 {
                     /* We read pins.txt and get the messageID, timestamp, authorID, and author of the pinned message.
                      * Using the timestamp, we get the unix timestamp and the amount of time that has passed since
@@ -230,7 +244,15 @@ namespace DiscordMemoriesBot
                         DateTime timestamp = DateTime.Parse(pinnedMessage[1]);
                         long unixTimestamp = ((DateTimeOffset)timestamp).ToUnixTimeSeconds();
                         ulong authorID = ulong.Parse(pinnedMessage[2]);
-                        var author = await currentGuild.GetMemberAsync(authorID);
+                        try
+                        {
+                            author = await currentGuild.GetMemberAsync(authorID);
+                        } 
+                        catch (NotFoundException)
+                        {
+                            authorIsDeletedAccount = true;
+                        }
+                        
                         ulong channelID = ulong.Parse(pinnedMessage[3]);
                         TimeSpan timeSinceMessagePosted = timestamp - DateTime.Now;
                         Console.WriteLine(timeSinceMessagePosted.Days * -1);
@@ -243,21 +265,33 @@ namespace DiscordMemoriesBot
                          * setup in Commands.cs for more on that), get that role from the roles file using the current
                          * guild's ID and mention it. Then, we build the embed and send it in the memories channel.
                          */
-                        if (((timeSinceMessagePosted.Days * -1) % 365) == 0)
+                        if (((timeSinceMessagePosted.Days * -1) % 365) == 0 && timeSinceMessagePosted.Days != 0)
                         {
                             memoryFound = true;
                             var channel = currentGuild.GetChannel(channelID);
+                            if (channel == null)
+                            {
+                                continue;
+                            }
                             var message = await channel.GetMessageAsync(messageID);
                             var memoryChannel = currentGuild.GetChannel(currentGuild.Channels.SingleOrDefault
                                 (channels => channels.Value.Name == "memories-channel").Key);
 
                             DiscordEmbedBuilder embedBuilder = new DiscordEmbedBuilder();
                             embedBuilder.Title = $"Memory from <t:{unixTimestamp}:f>";
-                            embedBuilder.AddField("Sent by: ", author.Mention);
+                            if (authorIsDeletedAccount)
+                            {
+                                embedBuilder.AddField("Sent by: " , "Deleted Account");
+                            }
+                            else
+                            {
+                                embedBuilder.AddField("Sent by: ", author.Mention);
+                            }
+                            
                             embedBuilder.AddField("Here's the message: ", message.JumpLink.ToString());
                             var embed = embedBuilder.Build();
 
-                            using (StreamReader rolesSR = new StreamReader("../../../roles.txt"))
+                            using (StreamReader rolesSR = new StreamReader("roles.txt"))
                             {
                                 string currentLineRoleFile;
                                 if (!(roleFile.Length == 0))
