@@ -231,6 +231,7 @@ namespace DiscordMemoriesBot.commands
                     }
                 }
             }
+            await ctx.Channel.SendMessageAsync("Retrieved pins from all currently watched channels!");
         }
 
         [Command("changerole"), Description("Changes the role to ping when this bot sends an embed message."), RequirePermissions(Permissions.ManageChannels)]
@@ -246,6 +247,21 @@ namespace DiscordMemoriesBot.commands
                 File.WriteAllText("roles.txt", role.Id.ToString() + ", " + ctx.Guild.Id.ToString());
                 await ctx.Channel.SendMessageAsync("Role changed!");
             }
+        }
+
+        [Command("getchannels"), Description("Lists all channels currently watched for pins by the bot."), RequirePermissions(Permissions.ManageChannels)]
+        public async Task GetChannels(CommandContext ctx)
+        {
+            ChannelReader cr = new();
+            DiscordEmbedBuilder eb = new();
+            eb.Title = "Channels I'm currently watching:";
+            foreach(var channel in cr.Channels)
+            {
+                var watchedChannel = ctx.Guild.GetChannel(channel);
+                eb.AddField("Channel", watchedChannel.Mention);
+            }
+            var embed = eb.Build();
+            await ctx.Channel.SendMessageAsync(embed);
         }
     }
 }

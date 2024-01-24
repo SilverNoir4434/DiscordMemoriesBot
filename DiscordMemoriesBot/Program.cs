@@ -23,12 +23,24 @@ namespace DiscordMemoriesBot
 
         static async Task Main(string[] args)
         {
-            if (!File.Exists("pins.txt")) File.Create("pins.txt");
-            if (!File.Exists("channels.txt")) File.Create("channels.txt");
-            if (!File.Exists("roles.txt")) File.Create("roles.txt");
+            if (!File.Exists("pins.txt"))
+            {
+                FileStream fs = File.Create("pins.txt");
+                fs.Close();
+            }
+            if (!File.Exists("channels.txt"))
+            {
+                FileStream fs = File.Create("channels.txt");
+                fs.Close();
+            }
+            if (!File.Exists("roles.txt")) {
+                FileStream fs = File.Create("roles.txt");
+                fs.Close();
+            }
             if (!File.Exists("config.json"))
             {
-                File.Create("config.json");
+                FileStream fs = File.Create("config.json");
+                fs.Close();
                 Console.WriteLine("Input bot token.");
                 var token = Console.ReadLine();
                 string jsonText = "{\r\n  \"token\": \"" + token + "\",\r\n  \"prefix\": \"!\"\r\n}";
