@@ -2,6 +2,8 @@ package org.github.SilverNoir4434;
 
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
+import net.dv8tion.jda.api.interactions.commands.OptionType;
+import net.dv8tion.jda.api.interactions.commands.build.Commands;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
@@ -47,6 +49,10 @@ public class Main {
 
         JDA api = JDABuilder.createDefault(BOT_TOKEN).addEventListeners(new MyListener(memoryDB)).build();
 
+        api.updateCommands().addCommands(
+                Commands.slash("add channel", "Adds channels for the bot to watch.")
+                        .addOption(OptionType.NUMBER, "id","ChannelID of the channel to watch.")
+        ).queue();
         memoryDB.close();
     }
 
@@ -55,6 +61,10 @@ public class Main {
            them, updating Memory table in database.
            TODO: Implement this method.
          */
+    }
+
+    private static void checkGuilds() {
+
     }
 
 }
