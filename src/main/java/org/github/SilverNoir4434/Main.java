@@ -1,23 +1,35 @@
 package org.github.SilverNoir4434;
 
+import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Message;
+import net.dv8tion.jda.api.entities.MessageEmbed;
+import net.dv8tion.jda.api.entities.channel.Channel;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
+import net.dv8tion.jda.api.entities.channel.middleman.GuildChannel;
+import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
+import org.w3c.dom.Text;
 
 import java.io.BufferedReader;
 import java.io.Console;
 import java.io.FileReader;
 import java.sql.*;
 
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class Main {
     static Connection memoryDB;
@@ -56,23 +68,27 @@ public class Main {
                 stmt.execute(createGuild);
                 stmt2.execute(createChannel);
                 stmt3.execute(createMemories);
-            // TODO: Add methods that both get watched channels and memories from server.
-            // Maybe don't do it here, in case that hasn't been set up by user yet.
 
         JDA api = JDABuilder.createDefault(BOT_TOKEN).addEventListeners(new MyListener(memoryDB)).build();
 
-        /*
-        https://jda.wiki/using-jda/interactions/#entity-select-menus
-        TODO: Implement this in add/remove channel methods, since it doesn't seem to like using IDs anyways.
-         */
+
         api.updateCommands().addCommands(
-                Commands.slash("addchannel", "Adds channels for the bot to watch.")
-                        .addOption(OptionType., "id","ChannelID of the channel to watch."),
-                Commands.slash("removechannel","Tells the bot to stop watching a channel.")
-                        .addOption(OptionType.INTEGER, "id", "ChannelID of the channel to stop watching"),
+                Commands.slash("addchannel", "Adds channels for the bot to watch."),
+                Commands.slash("removechannel","Tells the bot to stop watching a channel."),
+                Commands.slash("checkformemory", "Checks for a memory."),
                 Commands.slash("getpins", "Checks watched channels for new pins.")
         ).queue();
         memoryDB.close();
+
+        /*
+        TODO: Finish implementing scheduled execution of checkforMemory.
+         */
+        Runtime.getRuntime().addShutdownHook(new Thread() {
+            @Override
+            public void run() {
+                schedule.shutdown();
+            }
+        });
     }
 
     public static void checkforMemory(JDA api) throws SQLException {
@@ -81,24 +97,45 @@ public class Main {
          */
         memoryDB = DriverManager.getConnection("jdbc:sqlite:memories_database");
 
-        String getMemories = "SELECT * FROM MEMORY" +
-                "WHERE MEMORY_DATE=('now','-1 year');";
+        String getMemories = "SELECT * FROM MEMORY " +
+                "WHERE DATE(MEMORY_DATE)=DATE('now');";
 
         PreparedStatement stmt = memoryDB.prepareStatement(getMemories);
-        ArrayList<Long> memChannels = new ArrayList<>();
         ArrayList<Message> memories = new ArrayList<>();
         ResultSet results = stmt.executeQuery();
 
-        System.out.println(results);
+        if (!results.next()) {
+            System.out.println("No memories today.");
+            memoryDB.close();
+            return;
+        }
+
+        while (results.next()) {
+            MessageChannel memChannel = api.getTextChannelById(results.getLong("CHANNEL_ID"));
+            Message memory = memChannel.retrieveMessageById(results.getLong("MEMORY_ID")).complete();
+            EmbedBuilder embed = new EmbedBuilder();
+
+
+            embed.setTitle("Memory from <t:" + memory.getTimeCreated().toInstant().getEpochSecond() + ":f>");
+            embed.addField("Sent by:", memory.getAuthor().getAsMention(), true);
+            if (!memory.getContentRaw().isEmpty()) {
+                embed.setDescription(">>> " + memory.getContentRaw());
+                embed.addField("Original message link:", memory.getJumpUrl(), true);
+            } else {
+                embed.setDescription("No text in original memory.");
+                embed.addField("Here's the message:", memory.getJumpUrl(), true);
+            }
+
+            MessageChannel destChan = api.getTextChannelsByName("memories-channel",true).getFirst();
+            destChan.sendMessageEmbeds(embed.build()).queue();
+        }
 
         memoryDB.close();
     }
-    public static void getMemories(JDA api) throws SQLException {
-        /*
-        TODO: Test this.
-         */
+    public static int getMemories(JDA api) throws SQLException {
         memoryDB = DriverManager.getConnection("jdbc:sqlite:memories_database");
-        String getChannels = "SELECT * FROM CHANNELS;";
+        boolean foundMemory = false;
+        String getChannels = "SELECT * FROM CHANNEL;";
         PreparedStatement stmt = memoryDB.prepareStatement(getChannels);
         ArrayList<Long> memChannels = new ArrayList<>();
         ArrayList<Message> memories = new ArrayList<>();
@@ -122,13 +159,25 @@ public class Main {
         }
 
         for (Message m : memories) {
-            String addMemory = "INSERT INTO MEMORY(MEMORY_ID, MEMORY_LINK, MEMORY_AUTHOR, MEMORY_DATE, GUILD_ID, CHANNEL_ID) VALUES" +
-                    "(" + m.getIdLong() + ", '" + m.getJumpUrl() +"', '" + m.getAuthor().getId() +"', " + m.getTimeCreated() +
-                    ", " + m.getGuildIdLong() + ", " + m.getChannelIdLong() + ");";
+            String checkIfMemoryCaptured = "SELECT * FROM MEMORY WHERE MEMORY_ID = " + m.getIdLong();
             Statement stmt2 = memoryDB.createStatement();
-            stmt2.execute(addMemory);
+            ResultSet result = stmt2.executeQuery(checkIfMemoryCaptured);
+
+            if (!result.next()) {
+                foundMemory = true;
+                String addMemory = "INSERT OR IGNORE INTO MEMORY(MEMORY_ID, MEMORY_LINK, MEMORY_AUTHOR, MEMORY_DATE, GUILD_ID, CHANNEL_ID) VALUES" +
+                        "(" + m.getIdLong() + ", '" + m.getJumpUrl() +"', '" + m.getAuthor().getId() +"', '" + m.getTimeCreated().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) +
+                        "', " + m.getGuildIdLong() + ", " + m.getChannelIdLong() + ");";
+                Statement stmt3 = memoryDB.createStatement();
+                stmt3.execute(addMemory);
+            }
         }
         memoryDB.close();
+        if (foundMemory) {
+            return 1;
+        } else {
+            return 0;
+        }
     }
 }
 
