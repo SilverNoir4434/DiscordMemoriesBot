@@ -5,7 +5,7 @@ plugins {
 
 application.mainClass = "org.github.SilverNoir4434"
 group = "org.github.SilverNoir4434"
-version = "1.0-SNAPSHOT"
+version = "1.0.0"
 
 val jdaVersion = "5.6.1" //
 
@@ -18,6 +18,7 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter")
     implementation("net.dv8tion:JDA:${jdaVersion}")
     implementation("org.xerial:sqlite-jdbc:3.44.1.0")
+    implementation("org.quartz-scheduler:quartz:2.5.2")
 }
 
 

@@ -3,7 +3,6 @@ package org.github.SilverNoir4434;
 import net.dv8tion.jda.api.audit.ActionType;
 import net.dv8tion.jda.api.audit.AuditLogOption;
 import net.dv8tion.jda.api.entities.Message;
-import net.dv8tion.jda.api.entities.channel.Channel;
 import net.dv8tion.jda.api.entities.channel.ChannelType;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.entities.channel.middleman.GuildChannel;
@@ -13,12 +12,14 @@ import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEve
 import net.dv8tion.jda.api.events.interaction.component.EntitySelectInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.components.selections.EntitySelectMenu;
-import org.w3c.dom.Text;
 
 import java.sql.*;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
+
+import static org.github.SilverNoir4434.Main.postEmbed;
 
 public class MyListener extends ListenerAdapter {
 
@@ -30,9 +31,14 @@ public class MyListener extends ListenerAdapter {
     }
     @Override
     public void onGuildAuditLogEntryCreate(GuildAuditLogEntryCreateEvent event) {
+        // Watches for message to get pinned, adds to database is pin is from watched channel
         if (event.getEntry().getType() == ActionType.MESSAGE_PIN) {
             MessageChannel pinChan = (MessageChannel) event.getGuild().getGuildChannelById(event.getEntry().getOption(AuditLogOption.CHANNEL));
             Message pin = pinChan.retrieveMessageById(event.getEntry().getOption(AuditLogOption.MESSAGE)).complete();
+
+            if (pin == null) {
+                return;
+            }
 
             String checkIfWatchedChannel = "SELECT * FROM CHANNEL WHERE CHANNEL_ID = " + pinChan.getIdLong();
             try {
@@ -53,6 +59,7 @@ public class MyListener extends ListenerAdapter {
     }
     @Override
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
+        if (!event.isFromGuild()) return;
         switch(event.getName()) {
             case "addchannel":
                 event.reply("Choose channel to add.")
@@ -71,12 +78,12 @@ public class MyListener extends ListenerAdapter {
             case "checkformemory":
                 try {
                     event.reply("Checking...").queue();
-                    Main.checkforMemory(event.getJDA());
+                    Main.checkForMemory(event.getJDA());
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
                 }
                 break;
-            case "getpins":
+            case "getmemories":
                 try {
                     int res = Main.getMemories(event.getJDA());
                     if (res == 0) {
@@ -88,8 +95,58 @@ public class MyListener extends ListenerAdapter {
                     throw new RuntimeException(e);
                 }
                 break;
-            case "help":
+            case "randommemory":
+                try {
+                    db = DriverManager.getConnection("jdbc:sqlite:memories_database");
+                    String randMem = "SELECT * FROM memory WHERE GUILD_ID = " + event.getGuild().getId() + " ORDER BY RANDOM() LIMIT 1;";
+
+                    ResultSet res = db.prepareStatement(randMem).executeQuery();
+
+                    String year = res.getString("MEMORY_DATE").substring(0,4);
+                    event.reply("Posting memory from " + year + ":").queue();
+
+                    postEmbed(event.getJDA(), res, event.getChannel());
+                    db.close();
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
                 break;
+            case "checkday":
+                try {
+                    db = DriverManager.getConnection("jdbc:sqlite:memories_database");
+                    LocalDate date;
+
+                    String input = event.getOption("day").getAsString();
+                    try {
+                        DateTimeFormatter format = DateTimeFormatter.ofPattern("MM/dd/yyyy");
+                        date = LocalDate.parse(input, format);
+                        date.format(DateTimeFormatter.ISO_DATE);
+                    } catch (DateTimeParseException ex) {
+                        event.reply("Incorrect format! Date must be given in MM/DD/YYYY format.").queue();
+                        db.close();
+                        return;
+                    }
+
+                    String getMemories = "SELECT * FROM MEMORY " +
+                            "WHERE DATE(MEMORY_DATE)=DATE('" + date + "') AND GUILD_ID = " + event.getGuild().getId() + ";";
+
+                    PreparedStatement stmt = db.prepareStatement(getMemories);
+                    ResultSet results = stmt.executeQuery();
+
+                    if (!results.next()) {
+                        event.reply("No memory found for that day.").queue();
+                        db.close();
+                    }
+                    else {
+                        event.reply("Memory/memories found, posting now...").queue();
+                        while (results.next()) {
+                            Main.postEmbed(event.getJDA(), results, event.getChannel());
+                            db.close();
+                        }
+                    }
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
             default:
                 break;
         }
@@ -113,9 +170,10 @@ public class MyListener extends ListenerAdapter {
                 Statement stmt = db.createStatement();
                 stmt.execute(addChan);
                 event.reply("Added channel to list!").queue();
+                Main.getMemories(event.getJDA());
             } catch (SQLException ex) {
                 System.out.println(ex.getMessage());
-                event.reply("An error occurred! Are you sure that the channel you" +
+                event.reply("An error occurred! Are you sure that the channel you " +
                         "targeted isn't already in the list?").queue();
             }
             try {
