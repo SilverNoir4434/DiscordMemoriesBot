@@ -116,7 +116,7 @@ public class Main {
         }
 
         while (results.next()) {
-            postEmbed(api, results, api.getTextChannelsByName("memories-channel",true).getFirst());
+            postEmbed(api, results, api.getTextChannelsByName("memories-channel",true).get(0));
         }
 
         memoryDB.close();
