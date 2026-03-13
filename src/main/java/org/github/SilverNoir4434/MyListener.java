@@ -2,6 +2,7 @@ package org.github.SilverNoir4434;
 
 import net.dv8tion.jda.api.audit.ActionType;
 import net.dv8tion.jda.api.audit.AuditLogOption;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.channel.ChannelType;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
@@ -11,7 +12,7 @@ import net.dv8tion.jda.api.events.guild.GuildAuditLogEntryCreateEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.EntitySelectInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
-import net.dv8tion.jda.api.interactions.components.selections.EntitySelectMenu;
+import net.dv8tion.jda.api.components.selections.EntitySelectMenu;
 
 import java.sql.*;
 import java.time.LocalDate;
@@ -19,6 +20,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 
+import static org.github.SilverNoir4434.Main.log;
 import static org.github.SilverNoir4434.Main.postEmbed;
 
 public class MyListener extends ListenerAdapter {
@@ -62,19 +64,17 @@ public class MyListener extends ListenerAdapter {
         if (!event.isFromGuild()) return;
         switch(event.getName()) {
             case "addchannel":
-                event.reply("Choose channel to add.")
-                        .addActionRow(
-                                EntitySelectMenu.create("choose-channel-add", EntitySelectMenu.SelectTarget.CHANNEL)
-                                        .setChannelTypes(ChannelType.TEXT)
-                                        .build())
-                        .queue();
+                EntitySelectMenu menu = EntitySelectMenu.create("choose-channel-add", EntitySelectMenu.SelectTarget.CHANNEL)
+                        .setChannelTypes(ChannelType.TEXT)
+                        .build();
+                event.reply("Choose channel to add.").setComponents(ActionRow.of(menu)).queue();
                 break;
             case "removechannel":
-                event.reply("Choose channel to remove.")
-                        .addActionRow(
-                                EntitySelectMenu.create("choose-channel-remove", EntitySelectMenu.SelectTarget.CHANNEL)
-                                        .build())
-                        .queue();
+                EntitySelectMenu menu2 = EntitySelectMenu.create("choose-channel-remove", EntitySelectMenu.SelectTarget.CHANNEL)
+                        .setChannelTypes(ChannelType.TEXT)
+                        .build();
+                event.reply("Choose channel to remove.").setComponents(ActionRow.of(menu2)).queue();
+                break;
             case "checkformemory":
                 try {
                     event.reply("Checking...").queue();
@@ -140,7 +140,7 @@ public class MyListener extends ListenerAdapter {
                     else {
                         event.reply("Memory/memories found, posting now...").queue();
                         while (results.next()) {
-                            Main.postEmbed(event.getJDA(), results, event.getChannel());
+                            postEmbed(event.getJDA(), results, event.getChannel());
                             db.close();
                         }
                     }
@@ -172,7 +172,7 @@ public class MyListener extends ListenerAdapter {
                 event.reply("Added channel to list!").queue();
                 Main.getMemories(event.getJDA());
             } catch (SQLException ex) {
-                System.out.println(ex.getMessage());
+                log.error(ex.getMessage());
                 event.reply("An error occurred! Are you sure that the channel you " +
                         "targeted isn't already in the list?").queue();
             }

@@ -7,7 +7,7 @@ application.mainClass = "org.github.SilverNoir4434"
 group = "org.github.SilverNoir4434"
 version = "1.0.0"
 
-val jdaVersion = "5.6.1" //
+val jdaVersion = "6.3.1" //
 
 repositories {
     mavenCentral()
@@ -19,6 +19,7 @@ dependencies {
     implementation("net.dv8tion:JDA:${jdaVersion}")
     implementation("org.xerial:sqlite-jdbc:3.44.1.0")
     implementation("org.quartz-scheduler:quartz:2.5.2")
+    implementation("ch.qos.logback:logback-classic:1.5.25")
 }
 
 

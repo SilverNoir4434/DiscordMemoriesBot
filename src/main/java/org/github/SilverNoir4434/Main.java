@@ -12,14 +12,18 @@ import net.dv8tion.jda.api.exceptions.InvalidTokenException;
 import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
+import net.dv8tion.jda.api.requests.restaction.pagination.PinnedMessagePaginationAction;
 import org.quartz.JobDetail;
 import org.quartz.Scheduler;
 import org.quartz.Trigger;
 import org.quartz.impl.StdSchedulerFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.sql.*;
 
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -34,6 +38,7 @@ public class Main {
     static Connection memoryDB;
     static BufferedReader br;
     private static String BOT_TOKEN;
+    static Logger log = LoggerFactory.getLogger(Main.class);
     public static void main(String[] args) throws Exception {
             boolean checkInvalidToken = false;
             JDA api;
@@ -43,7 +48,7 @@ public class Main {
                 token.createNewFile();
                 br = new BufferedReader(new FileReader("token.txt"));
                 Scanner scan = new Scanner(System.in);
-                System.out.println("Please provide token for your discord bot.");
+                log.info("Please provide the token for your discord bot.");
                 String input = scan.nextLine();
                 BOT_TOKEN = input;
                 FileWriter write = new FileWriter("token.txt");
@@ -98,7 +103,7 @@ public class Main {
                 }
                 break;
             } catch (InvalidTokenException ex) {
-                System.out.println("Token is invalid, try again!");
+                log.error("Token is invalid, please try again!");
                 Scanner scan = new Scanner(System.in);
                 BOT_TOKEN = scan.nextLine();
             }
@@ -146,7 +151,7 @@ public class Main {
         ResultSet results = stmt.executeQuery();
 
         if (!results.next()) {
-            System.out.println("No memories today.");
+            log.info("Checked for memory at {}, no memory found.", LocalTime.now().format(DateTimeFormatter.ISO_LOCAL_TIME));
             memoryDB.close();
         }
 
@@ -175,8 +180,11 @@ public class Main {
             for (TextChannel tc : channels) {
                 for (Long l : memChannels) {
                     if (tc.getIdLong() == l) {
-                        List<Message> interim = tc.retrievePinnedMessages().complete();
-                        memories.addAll(interim);
+                        List<PinnedMessagePaginationAction.PinnedMessage> interim = tc.retrievePinnedMessages().stream().toList();
+                        for (PinnedMessagePaginationAction.PinnedMessage p : interim) {
+                            Message msg = p.getMessage();
+                            memories.add(msg);
+                        }
                     }
                 }
             }
@@ -220,7 +228,6 @@ public class Main {
             embed.addField("Here's the message:", memory.getJumpUrl(), true);
         }
 
-        //MessageChannel destChan = api.getTextChannelsByName("memories-channel",true).getFirst();
         destChan.sendMessageEmbeds(embed.build()).queue();
     }
 }
