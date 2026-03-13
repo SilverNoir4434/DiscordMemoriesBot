@@ -8,6 +8,7 @@ import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
+import net.dv8tion.jda.api.exceptions.InvalidTokenException;
 import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
@@ -16,13 +17,14 @@ import org.quartz.Scheduler;
 import org.quartz.Trigger;
 import org.quartz.impl.StdSchedulerFactory;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
+import java.io.*;
 import java.sql.*;
 
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.Scanner;
 
 import static org.quartz.CronScheduleBuilder.dailyAtHourAndMinute;
 import static org.quartz.JobBuilder.newJob;
@@ -33,47 +35,80 @@ public class Main {
     static BufferedReader br;
     private static String BOT_TOKEN;
     public static void main(String[] args) throws Exception {
-
-        try {
+            boolean checkInvalidToken = false;
+            JDA api;
             memoryDB = DriverManager.getConnection("jdbc:sqlite:memories_database");
-            br = new BufferedReader(new FileReader("token.txt"));
-            BOT_TOKEN = br.readLine();
-        } catch (SQLException ex) {
-            ex.printStackTrace();
-        }
+            File token = new File("token.txt");
+            if (token.length() == 0) {
+                token.createNewFile();
+                br = new BufferedReader(new FileReader("token.txt"));
+                Scanner scan = new Scanner(System.in);
+                System.out.println("Please provide token for your discord bot.");
+                String input = scan.nextLine();
+                BOT_TOKEN = input;
+                FileWriter write = new FileWriter("token.txt");
+                write.write("-1\n");
+                write.write(input);
+                write.close();
+            } else {
+                br = new BufferedReader(new FileReader("token.txt"));
+                String text = br.readLine();
+                if (Objects.equals(text, "-1")) {
+                    checkInvalidToken = true;
+                    BOT_TOKEN = br.readLine();
+                }
+                else BOT_TOKEN = text;
+            }
         // Creating database in case it doesn't exist
-            String createGuild = "CREATE TABLE IF NOT EXISTS GUILD" +
-                    "(GUILD_ID INT PRIMARY KEY," +
-                    "GUILD_NAME TEXT NOT NULL);";
-            String createChannel = "CREATE TABLE IF NOT EXISTS CHANNEL" +
-                    "(CHANNEL_ID INT PRIMARY KEY," +
-                    "CHANNEL_NAME TEXT NOT NULL," +
-                    "GUILD_ID INT NOT NULL," +
-                    "FOREIGN KEY(GUILD_ID) REFERENCES GUILD(GUILD_ID));";
-            String createMemories = "CREATE TABLE IF NOT EXISTS MEMORY" +
-                    "(MEMORY_ID INT PRIMARY KEY," +
-                    "MEMORY_LINK TEXT NOT NULL," +
-                    "MEMORY_AUTHOR INT NOT NULL," +
-                    "MEMORY_DATE DATE NOT NULL," +
-                    "GUILD_ID INT NOT NULL," +
-                    "CHANNEL_ID INT NOT NULL," +
-                    "FOREIGN KEY(GUILD_ID) REFERENCES GUILD(GUILD_ID)," +
-                    "FOREIGN KEY(CHANNEL_ID) REFERENCES CHANNEL(CHANNEL_ID));";
-                Statement stmt = memoryDB.createStatement();
-                Statement stmt2 = memoryDB.createStatement();
-                Statement stmt3 = memoryDB.createStatement();
-                stmt.execute(createGuild);
-                stmt2.execute(createChannel);
-                stmt3.execute(createMemories);
+        String createGuild = "CREATE TABLE IF NOT EXISTS GUILD" +
+                "(GUILD_ID INT PRIMARY KEY," +
+                "GUILD_NAME TEXT NOT NULL);";
+        String createChannel = "CREATE TABLE IF NOT EXISTS CHANNEL" +
+                "(CHANNEL_ID INT PRIMARY KEY," +
+                "CHANNEL_NAME TEXT NOT NULL," +
+                "GUILD_ID INT NOT NULL," +
+                "FOREIGN KEY(GUILD_ID) REFERENCES GUILD(GUILD_ID));";
+        String createMemories = "CREATE TABLE IF NOT EXISTS MEMORY" +
+                "(MEMORY_ID INT PRIMARY KEY," +
+                "MEMORY_LINK TEXT NOT NULL," +
+                "MEMORY_AUTHOR INT NOT NULL," +
+                "MEMORY_DATE DATE NOT NULL," +
+                "GUILD_ID INT NOT NULL," +
+                "CHANNEL_ID INT NOT NULL," +
+                "FOREIGN KEY(GUILD_ID) REFERENCES GUILD(GUILD_ID)," +
+                "FOREIGN KEY(CHANNEL_ID) REFERENCES CHANNEL(CHANNEL_ID));";
+        Statement stmt = memoryDB.createStatement();
+        Statement stmt2 = memoryDB.createStatement();
+        Statement stmt3 = memoryDB.createStatement();
+        stmt.execute(createGuild);
+        stmt2.execute(createChannel);
+        stmt3.execute(createMemories);
 
         //Create bot instance, add slash commands to bot
-        JDA api = JDABuilder.createDefault(BOT_TOKEN).addEventListeners(new MyListener(memoryDB)).build();
+        while (true) {
+            try {
+                api = JDABuilder.createDefault(BOT_TOKEN).addEventListeners(new MyListener(memoryDB)).build();
+                if (checkInvalidToken) {
+                    token = new File("token.txt");
+                    token.delete();
+                    token.createNewFile();
+                    FileWriter write = new FileWriter("token.txt");
+                    write.write(BOT_TOKEN);
+                    write.close();
+                }
+                break;
+            } catch (InvalidTokenException ex) {
+                System.out.println("Token is invalid, try again!");
+                Scanner scan = new Scanner(System.in);
+                BOT_TOKEN = scan.nextLine();
+            }
+        }
 
 
         api.updateCommands().addCommands(
                 Commands.slash("addchannel", "Adds channels for the bot to watch.")
                         .setDefaultPermissions(DefaultMemberPermissions.enabledFor(Permission.MANAGE_CHANNEL)),
-                Commands.slash("removechannel","Tells the bot to stop watching a channel.")
+                Commands.slash("removechannel", "Tells the bot to stop watching a channel.")
                         .setDefaultPermissions(DefaultMemberPermissions.enabledFor(Permission.MANAGE_CHANNEL)),
                 Commands.slash("checkformemory", "Checks for a memory.")
                         .setDefaultPermissions(DefaultMemberPermissions.enabledFor(Permission.MANAGE_CHANNEL)),
@@ -93,7 +128,7 @@ public class Main {
         Trigger trigger = newTrigger()
                 .withIdentity("TimeTrigger", "group1")
                 .startNow()
-                .withSchedule(dailyAtHourAndMinute(12,0))
+                .withSchedule(dailyAtHourAndMinute(12, 0))
                 .build();
 
         Scheduler schedule = StdSchedulerFactory.getDefaultScheduler();
