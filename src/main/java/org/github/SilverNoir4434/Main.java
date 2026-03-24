@@ -23,6 +23,7 @@ import org.slf4j.LoggerFactory;
 import java.io.*;
 import java.sql.*;
 
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -121,7 +122,9 @@ public class Main {
                         .setDefaultPermissions(DefaultMemberPermissions.enabledFor(Permission.MANAGE_CHANNEL)),
                 Commands.slash("randommemory", "Grabs a random pin from watched channels."),
                 Commands.slash("checkday", "Checks a certain day for a memory.")
-                        .addOption(OptionType.STRING, "day", "Day to check for memory (Use format MM/DD/YYYY)", true)
+                        .addOption(OptionType.STRING, "day", "Day to check for memory (Use format MM/DD/YYYY)", true),
+                Commands.slash("listchannels", "Lists channels the bot is currently watching.")
+                        .setDefaultPermissions(DefaultMemberPermissions.enabledFor(Permission.MANAGE_CHANNEL))
         ).queue();
         memoryDB.close();
 
@@ -144,8 +147,11 @@ public class Main {
     public static void checkForMemory(JDA api) throws SQLException {
         memoryDB = DriverManager.getConnection("jdbc:sqlite:memories_database");
         // Queries database for message pinned a year ago, posts embed to channel if any are found.
+
+        LocalDate today = LocalDate.now();
+
         String getMemories = "SELECT * FROM MEMORY " +
-                "WHERE DATE(MEMORY_DATE)=DATE('now, -1 year');";
+                "WHERE DATE(MEMORY_DATE) LIKE '%-" + today.getMonth() + "-" + today.getDayOfMonth() + "';";
 
         PreparedStatement stmt = memoryDB.prepareStatement(getMemories);
         ResultSet results = stmt.executeQuery();

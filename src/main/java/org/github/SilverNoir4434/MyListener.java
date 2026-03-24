@@ -1,5 +1,6 @@
 package org.github.SilverNoir4434;
 
+import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.audit.ActionType;
 import net.dv8tion.jda.api.audit.AuditLogOption;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
@@ -18,7 +19,9 @@ import java.sql.*;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import static org.github.SilverNoir4434.Main.log;
 import static org.github.SilverNoir4434.Main.postEmbed;
@@ -67,13 +70,17 @@ public class MyListener extends ListenerAdapter {
                 EntitySelectMenu menu = EntitySelectMenu.create("choose-channel-add", EntitySelectMenu.SelectTarget.CHANNEL)
                         .setChannelTypes(ChannelType.TEXT)
                         .build();
-                event.reply("Choose channel to add.").setComponents(ActionRow.of(menu)).queue();
+                event.reply("Choose channel to add.").setComponents(ActionRow.of(menu)).setEphemeral(true).queue(hook -> {
+                    hook.deleteOriginal().queueAfter(30, TimeUnit.SECONDS);
+                });
                 break;
             case "removechannel":
                 EntitySelectMenu menu2 = EntitySelectMenu.create("choose-channel-remove", EntitySelectMenu.SelectTarget.CHANNEL)
                         .setChannelTypes(ChannelType.TEXT)
                         .build();
-                event.reply("Choose channel to remove.").setComponents(ActionRow.of(menu2)).queue();
+                event.reply("Choose channel to remove.").setComponents(ActionRow.of(menu2)).setEphemeral(true).queue(hook -> {
+                    hook.deleteOriginal().queueAfter(30, TimeUnit.SECONDS);
+                });
                 break;
             case "checkformemory":
                 try {
@@ -147,6 +154,34 @@ public class MyListener extends ListenerAdapter {
                 } catch (SQLException e) {
                     throw new RuntimeException(e);
                 }
+            case "listchannels":
+                try {
+                    event.deferReply().queue();
+                    db = DriverManager.getConnection("jdbc:sqlite:memories_database");
+
+                    String getChan = "SELECT CHANNEL_ID FROM CHANNEL WHERE GUILD_ID = " + event.getGuild().getId() + ";";
+                    ResultSet res = db.prepareStatement(getChan).executeQuery();
+
+                    List<TextChannel> channels = new ArrayList<>();
+
+                    while (res.next()) {
+                        channels.add(event.getGuild().getTextChannelById(res.getLong("CHANNEL_ID")));
+                    }
+                    EmbedBuilder embed = new EmbedBuilder();
+
+                    embed.setTitle("Watched Channels:");
+
+                    for (TextChannel chan : channels) {
+                        embed.addField(chan.getName(), chan.getJumpUrl(), false);
+                    }
+
+                    event.getHook().sendMessageEmbeds(embed.build()).queue();
+
+
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+                break;
             default:
                 break;
         }
