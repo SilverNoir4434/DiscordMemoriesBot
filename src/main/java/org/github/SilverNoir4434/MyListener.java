@@ -1,9 +1,12 @@
 package org.github.SilverNoir4434;
 
 import net.dv8tion.jda.api.EmbedBuilder;
+import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.audit.ActionType;
 import net.dv8tion.jda.api.audit.AuditLogOption;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.selections.SelectOption;
+import net.dv8tion.jda.api.components.selections.StringSelectMenu;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.channel.ChannelType;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
@@ -12,6 +15,7 @@ import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import net.dv8tion.jda.api.events.guild.GuildAuditLogEntryCreateEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.EntitySelectInteractionEvent;
+import net.dv8tion.jda.api.events.interaction.component.StringSelectInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.components.selections.EntitySelectMenu;
 
@@ -58,13 +62,18 @@ public class MyListener extends ListenerAdapter {
                     stmt.execute(insert);
                 }
             } catch (SQLException e) {
-                throw new RuntimeException(e);
+                log.error("Encountered an SQL error!", e);
             }
         }
     }
     @Override
     public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
         if (!event.isFromGuild()) return;
+        if (!event.getName().equals("addchannel") && Main.noChannelsAdded) {
+            event.reply("You haven't added any channels yet! Please run /addchannel to add channels " +
+                    "for me to watch.").queue();
+            return;
+        }
         switch(event.getName()) {
             case "addchannel":
                 EntitySelectMenu menu = EntitySelectMenu.create("choose-channel-add", EntitySelectMenu.SelectTarget.CHANNEL)
@@ -75,19 +84,44 @@ public class MyListener extends ListenerAdapter {
                 });
                 break;
             case "removechannel":
-                EntitySelectMenu menu2 = EntitySelectMenu.create("choose-channel-remove", EntitySelectMenu.SelectTarget.CHANNEL)
-                        .setChannelTypes(ChannelType.TEXT)
-                        .build();
+                try {
+                    db = DriverManager.getConnection("jdbc:sqlite:memories_database");
+                } catch (SQLException e) {
+                    log.error("Encountered an SQL error!", e);
+                }
+
+                StringSelectMenu.Builder build = StringSelectMenu.create("choose-channel-remove");
+                StringSelectMenu menu2 = null;
+
+                try {
+                    String get = "SELECT * FROM CHANNEL WHERE GUILD_ID = " +event.getGuild().getId() + ";";
+                    ResultSet res = db.prepareStatement(get).executeQuery();
+
+                    while (res.next()) {
+                        TextChannel chan = event.getGuild().getTextChannelById(res.getLong("CHANNEL_ID"));
+                        build.addOption(chan.getName(), chan.getId());
+                    }
+
+                    menu2 = build.build();
+
+                } catch (SQLException e) {
+                    log.error("Encountered an SQL error!", e);
+                }
                 event.reply("Choose channel to remove.").setComponents(ActionRow.of(menu2)).setEphemeral(true).queue(hook -> {
                     hook.deleteOriginal().queueAfter(30, TimeUnit.SECONDS);
                 });
+
+
                 break;
             case "checkformemory":
+                //event.deferReply().queue();
                 try {
-                    event.reply("Checking...").queue();
-                    Main.checkForMemory(event.getJDA());
+                    Boolean check = Main.checkForMemory(event.getJDA());
+                    if (!check) {
+                        event.reply("No memory found for today!").queue();
+                    }
                 } catch (SQLException e) {
-                    throw new RuntimeException(e);
+                    log.error("Encountered an SQL error!", e);
                 }
                 break;
             case "getmemories":
@@ -99,7 +133,7 @@ public class MyListener extends ListenerAdapter {
                         event.reply("Found a memory and archived it!").queue();
                     }
                 } catch (SQLException e) {
-                    throw new RuntimeException(e);
+                    log.error("Encountered an SQL error!", e);
                 }
                 break;
             case "randommemory":
@@ -115,7 +149,7 @@ public class MyListener extends ListenerAdapter {
                     postEmbed(event.getJDA(), res, event.getChannel());
                     db.close();
                 } catch (SQLException e) {
-                    throw new RuntimeException(e);
+                    log.error("Encountered an SQL error!", e);
                 }
                 break;
             case "checkday":
@@ -152,7 +186,7 @@ public class MyListener extends ListenerAdapter {
                         }
                     }
                 } catch (SQLException e) {
-                    throw new RuntimeException(e);
+                    log.error("Encountered an SQL error!", e);
                 }
             case "listchannels":
                 try {
@@ -179,7 +213,7 @@ public class MyListener extends ListenerAdapter {
 
 
                 } catch (SQLException e) {
-                    throw new RuntimeException(e);
+                    log.error("Encountered an SQL error!", e);
                 }
                 break;
             default:
@@ -194,9 +228,13 @@ public class MyListener extends ListenerAdapter {
         try {
             db = DriverManager.getConnection("jdbc:sqlite:memories_database");
         } catch (SQLException e) {
-            throw new RuntimeException(e);
+            log.error("Encountered an SQL error!", e);
         }
         if (event.getComponentId().equals("choose-channel-add")) {
+            if (!event.getGuild().getSelfMember().hasPermission(watchedChannel, Permission.VIEW_CHANNEL)) {
+                event.editMessage("I can't view that channel, you need to edit my permissions!").queue();
+                return;
+            }
             String addChan = "INSERT INTO CHANNEL " +
                     "VALUES(" + watchedChannel.getIdLong() + ", '"
                     + watchedChannel.getName() + "', "
@@ -204,36 +242,47 @@ public class MyListener extends ListenerAdapter {
             try {
                 Statement stmt = db.createStatement();
                 stmt.execute(addChan);
-                event.reply("Added channel to list!").queue();
+                event.editMessage("Added channel to list!").setComponents().queue();
+                Main.noChannelsAdded = false;
                 Main.getMemories(event.getJDA());
             } catch (SQLException ex) {
                 log.error(ex.getMessage());
-                event.reply("An error occurred! Are you sure that the channel you " +
+                event.editMessage("An error occurred! Are you sure that the channel you " +
                         "targeted isn't already in the list?").queue();
             }
             try {
                 db.close();
             } catch (SQLException e) {
-                throw new RuntimeException(e);
+                log.error("Encountered an SQL error!", e);
             }
         }
-        else if (event.getComponentId().equals("choose-channel-remove")) {
-            String rmChan = "DELETE FROM CHANNEL " +
-                    "WHERE CHANNEL_ID=" + watchedChannel.getIdLong() + ";";
-            try {
-                Statement stmt = db.createStatement();
-                stmt.execute(rmChan);
-                event.reply("Removed channel from list!").queue();
-            } catch (SQLException ex) {
-                System.out.println(ex.getMessage());
-                event.reply("An error occurred! Are you sure that the channel you" +
-                        "targeted is in the list?").queue();
-            }
-            try {
-                db.close();
-            } catch (SQLException e) {
-                throw new RuntimeException(e);
-            }
+    }
+
+    @Override
+    public void onStringSelectInteraction(StringSelectInteractionEvent event) {
+        try {
+            db = DriverManager.getConnection("jdbc:sqlite:memories_database");
+        } catch (SQLException e) {
+            log.error("Encountered an SQL error!", e);
+        }
+        List<SelectOption> choice = event.getInteraction().getSelectedOptions();
+
+        TextChannel chan = event.getGuild().getTextChannelById(choice.getFirst().getValue());
+        if (!event.getGuild().getSelfMember().hasPermission(chan, Permission.VIEW_CHANNEL)) {
+            event.editMessage("I can't view that channel, you need to edit my permissions!").queue();
+            return;
+        }
+
+        String removeChan = "DELETE FROM CHANNEL WHERE CHANNEL_ID = " + chan.getIdLong() + ";";
+        try {
+            Statement stmt = db.createStatement();
+            stmt.execute(removeChan);
+            event.editMessage("Removed channel from list!").setComponents().queue();
+            ResultSet res = db.prepareStatement("SELECT * FROM CHANNEL").executeQuery();
+            if (!res.next()) Main.noChannelsAdded = true;
+            db.close();
+        } catch (SQLException e) {
+            log.error("Encountered an SQL error!", e);
         }
     }
 }

@@ -20,6 +20,7 @@ dependencies {
     implementation("org.xerial:sqlite-jdbc:3.44.1.0")
     implementation("org.quartz-scheduler:quartz:2.5.2")
     implementation("ch.qos.logback:logback-classic:1.5.25")
+    implementation("io.github.cdimascio:dotenv-java:3.2.0")
 }
 
 
@@ -29,7 +30,7 @@ tasks.withType<JavaCompile> {
 
     // Set this to the version of java you want to use,
     // the minimum required for JDA is 1.8
-    sourceCompatibility = "1.8"
+    sourceCompatibility = "17"
 }
 
 tasks.test {

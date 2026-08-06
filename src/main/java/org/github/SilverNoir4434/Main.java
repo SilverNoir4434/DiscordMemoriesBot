@@ -21,6 +21,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.sql.*;
 
 import java.time.LocalDate;
@@ -28,43 +30,44 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
-import java.util.Scanner;
 
 import static org.quartz.CronScheduleBuilder.dailyAtHourAndMinute;
 import static org.quartz.JobBuilder.newJob;
 import static org.quartz.TriggerBuilder.newTrigger;
+import io.github.cdimascio.dotenv.Dotenv;
 
 public class Main {
     static Connection memoryDB;
-    static BufferedReader br;
     private static String BOT_TOKEN;
     static Logger log = LoggerFactory.getLogger(Main.class);
+    static boolean noChannelsAdded = false;
     public static void main(String[] args) throws Exception {
-            boolean checkInvalidToken = false;
+            if (System.getenv("DISCORD_TOKEN") != null) {
+                BOT_TOKEN = System.getenv("DISCORD_TOKEN");
+            } else {
+                Dotenv dotenv = Dotenv.load();
+                BOT_TOKEN = dotenv.get("DISCORD_TOKEN");
+            }
+
+            if (BOT_TOKEN.isEmpty()) {
+                log.error("No token provided! Check the environment variables.", new InvalidTokenException());
+                return;
+            } else {
+                URL url = new URL("https://discord.com/api/users/@me");
+                HttpURLConnection con = (HttpURLConnection) url.openConnection();
+                con.setRequestMethod("GET");
+                con.setRequestProperty("Authorization", "Bot " + BOT_TOKEN);
+                con.connect();
+                int code = con.getResponseCode();
+                if (code == 401) {
+                    log.error("Token is invalid! Please ensure you have copied a valid Discord bot token.", new InvalidTokenException());
+                    return;
+                } else {
+                    con.disconnect();
+                }
+            }
             JDA api;
             memoryDB = DriverManager.getConnection("jdbc:sqlite:memories_database");
-            File token = new File("token.txt");
-            if (token.length() == 0) {
-                token.createNewFile();
-                br = new BufferedReader(new FileReader("token.txt"));
-                Scanner scan = new Scanner(System.in);
-                log.info("Please provide the token for your discord bot.");
-                String input = scan.nextLine();
-                BOT_TOKEN = input;
-                FileWriter write = new FileWriter("token.txt");
-                write.write("-1\n");
-                write.write(input);
-                write.close();
-            } else {
-                br = new BufferedReader(new FileReader("token.txt"));
-                String text = br.readLine();
-                if (Objects.equals(text, "-1")) {
-                    checkInvalidToken = true;
-                    BOT_TOKEN = br.readLine();
-                }
-                else BOT_TOKEN = text;
-            }
         // Creating database in case it doesn't exist
         String createGuild = "CREATE TABLE IF NOT EXISTS GUILD" +
                 "(GUILD_ID INT PRIMARY KEY," +
@@ -90,26 +93,14 @@ public class Main {
         stmt2.execute(createChannel);
         stmt3.execute(createMemories);
 
-        //Create bot instance, add slash commands to bot
-        while (true) {
-            try {
-                api = JDABuilder.createDefault(BOT_TOKEN).addEventListeners(new MyListener(memoryDB)).build();
-                if (checkInvalidToken) {
-                    token = new File("token.txt");
-                    token.delete();
-                    token.createNewFile();
-                    FileWriter write = new FileWriter("token.txt");
-                    write.write(BOT_TOKEN);
-                    write.close();
-                }
-                break;
-            } catch (InvalidTokenException ex) {
-                log.error("Token is invalid, please try again!");
-                Scanner scan = new Scanner(System.in);
-                BOT_TOKEN = scan.nextLine();
-            }
-        }
+        ResultSet res = memoryDB.prepareStatement("SELECT * FROM CHANNEL").executeQuery();
 
+        if (!res.next()) noChannelsAdded = true;
+
+
+
+        //Create bot instance, add slash commands to bot
+        api = JDABuilder.createDefault(BOT_TOKEN).addEventListeners(new MyListener(memoryDB)).build();
 
         api.updateCommands().addCommands(
                 Commands.slash("addchannel", "Adds channels for the bot to watch.")
@@ -144,7 +135,7 @@ public class Main {
         schedule.scheduleJob(job, trigger);
     }
 
-    public static void checkForMemory(JDA api) throws SQLException {
+    public static Boolean checkForMemory(JDA api) throws SQLException {
         memoryDB = DriverManager.getConnection("jdbc:sqlite:memories_database");
         // Queries database for message pinned a year ago, posts embed to channel if any are found.
 
@@ -159,6 +150,7 @@ public class Main {
         if (!results.next()) {
             log.info("Checked for memory at {}, no memory found.", LocalTime.now().format(DateTimeFormatter.ISO_LOCAL_TIME));
             memoryDB.close();
+            return false;
         }
 
         while (results.next()) {
@@ -166,6 +158,7 @@ public class Main {
         }
 
         memoryDB.close();
+        return true;
     }
     public static int getMemories(JDA api) throws SQLException {
         memoryDB = DriverManager.getConnection("jdbc:sqlite:memories_database");
