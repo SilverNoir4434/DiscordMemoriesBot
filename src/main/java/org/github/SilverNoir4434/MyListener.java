@@ -267,7 +267,7 @@ public class MyListener extends ListenerAdapter {
         }
         List<SelectOption> choice = event.getInteraction().getSelectedOptions();
 
-        TextChannel chan = event.getGuild().getTextChannelById(choice.getFirst().getValue());
+        TextChannel chan = event.getGuild().getTextChannelById(choice.get(0).getValue());
         if (!event.getGuild().getSelfMember().hasPermission(chan, Permission.VIEW_CHANNEL)) {
             event.editMessage("I can't view that channel, you need to edit my permissions!").queue();
             return;
