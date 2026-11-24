@@ -6,7 +6,7 @@ services:
       # Read from the host shell at `docker compose up`; never stored in the repo.
       DISCORD_TOKEN: ${DISCORD_TOKEN:?set DISCORD_TOKEN in the shell before running compose}
     volumes:
-      - bot-data:/data
+      - ./bot-data:/data
     labels:
       - com.centurylinklabs.watchtower.enable=true
 
