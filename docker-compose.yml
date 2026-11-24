@@ -1,0 +1,22 @@
+services:
+  bot:
+    image: ghcr.io/silvernoir4434/discordmemoriesbot:latest
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - bot-data:/data
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+
+  # Polls the registry and recreates the bot container whenever :latest changes.
+  watchtower:
+    image: containrrr/watchtower
+    restart: unless-stopped
+    command: --label-enable --cleanup --interval 300
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Registry login, needed because the GHCR package is private.
+      - ${HOME}/.docker/config.json:/config.json:ro
+
+volumes:
+  bot-data:
