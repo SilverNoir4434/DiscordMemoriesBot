@@ -2,7 +2,9 @@ services:
   bot:
     image: ghcr.io/silvernoir4434/discordmemoriesbot:latest
     restart: unless-stopped
-    env_file: .env
+    environment:
+      # Read from the host shell at `docker compose up`; never stored in the repo.
+      DISCORD_TOKEN: ${DISCORD_TOKEN:?set DISCORD_TOKEN in the shell before running compose}
     volumes:
       - bot-data:/data
     labels:
