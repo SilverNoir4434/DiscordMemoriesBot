@@ -15,6 +15,9 @@ services:
     image: containrrr/watchtower
     restart: unless-stopped
     command: --label-enable --cleanup --interval 300
+    environment:
+      # Watchtower defaults to Docker API 1.25, which current Docker Engine rejects (minimum 1.40).
+      DOCKER_API_VERSION: "1.44"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       # Registry login, needed because the GHCR package is private.
